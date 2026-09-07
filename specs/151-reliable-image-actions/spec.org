@@ -5,7 +5,7 @@
 #+DEFINITION_GATE: PASS
 #+OPERATOR_SIGNOFF: PENDING
 
-* Specification Summary
+* Reliable Image Actions
 :PROPERTIES:
 :CUSTOM_ID: summary
 :END:
