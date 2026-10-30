@@ -124,7 +124,7 @@ classification; it is provenance, not current state.
 
 - *Specification:* [[file:../specs/153-developer-id-gui-release/spec.org][W153 - Developer ID GUI release]]
 
-** TODO W154 - FAL image models and cost visibility :feature:
+** REVIEW W154 - FAL image models and cost visibility :feature:
 :PROPERTIES:
 :CUSTOM_ID: w-154
 :PRIORITY: P1
@@ -133,7 +133,7 @@ classification; it is provenance, not current state.
 :END:
 
 - *Specification:* [[file:../specs/154-fal-image-models-and-cost-visibility/spec.org][W154 - FAL image models and cost visibility]]
-- Definition pending.
+- Definition reviewed; operator sign-off pending. [[file:../specs/154-fal-image-models-and-cost-visibility/audits.yaml][Definition self-review]] records the current candidate and its limits.
 
 * Legacy Acceptance Criteria (SDLC v1) :legacy:
 :PROPERTIES:
