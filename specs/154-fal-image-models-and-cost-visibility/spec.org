@@ -129,7 +129,7 @@ For both prompt-only and working-image contexts, a user can search the live FAL 
 :END:
 
 - Criterion :: Given a compatible selected endpoint, Apply sends the prompt and, when present, the *one graph-owned base image* to that endpoint using its validated payload shape; result provenance and held-result matching retain that endpoint ID.
-- Proven by :: [[#rt-154-2][RT154.2]]
+- Proven by :: [[#rt-154-2][RT154.2]] and [[#ot-154-2][OT154.2]]
 
 ** AC154.3 - Endpoint-specific cost state :ac:
 :PROPERTIES:
@@ -153,7 +153,7 @@ For both prompt-only and working-image contexts, a user can search the live FAL 
 :END:
 
 - Criterion :: Given an accepted compatible model selection, Apply makes *no additional cost-confirmation request*; existing prompt, credential, busy-state, graph and cancellation guards still apply.
-- Proven by :: [[#rt-154-5][RT154.5]]
+- Proven by :: [[#rt-154-5][RT154.5]] and [[#ot-154-2][OT154.2]]
 
 ** AC154.6 - Account usage visibility :ac:
 :PROPERTIES:
@@ -292,6 +292,18 @@ For both prompt-only and working-image contexts, a user can search the live FAL 
 - Procedure :: In a prepared app, refresh the model catalogue, price one supported endpoint, then refresh account balance and usage once; inspect the request URLs, response-derived labels and permissions without submitting generation.
 - Expected :: The live catalogue and price states reflect FAL responses, and account data appears only with a suitable billing key; any provider contract difference is recorded before a release claim.
 - Bounds :: One invocation of each read-only API flow, no generation or upload, no persistent automated test, no credentials in recorded evidence.
+- Record :: Write the dated result to =validation.org=.
+
+** OT154.2 - Bounded paid model execution :testdef:
+:PROPERTIES:
+:CUSTOM_ID: ot-154-2
+:END:
+
+- Covers :: [[#ac-154-2][AC154.2]] and [[#ac-154-5][AC154.5]]
+- Boundary :: Prepared GUI against live FAL generation and edit endpoints.
+- Procedure :: With an operator-supplied generation key, select one priced compatible non-default prompt endpoint and one priced compatible non-default edit endpoint at or below the USD 0.20 threshold, then submit one prompt-only request and one one-reference Apply; inspect output, provenance and the absence of an Apply confirmation.
+- Expected :: Both requests produce an image through the selected endpoint and the edit uses the graph base; failures are recorded against the exact endpoint and request contract, without a claim that every catalogue entry is live-validated.
+- Bounds :: At most two paid requests with displayed estimates at or below USD 0.20 each; no automatic retry, CI or persistent suite call. If no suitably priced endpoints or credential is available, record AMBER and request operator validation rather than substituting an unbounded paid test.
 - Record :: Write the dated result to =validation.org=.
 
 * Edge Cases
