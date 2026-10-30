@@ -1,0 +1,404 @@
+#+TITLE: W154 - FAL image models and cost visibility
+#+SCHEMA: 10
+#+SUBTITLE: Unified change specification
+#+STARTUP: overview
+#+OPTIONS: toc:2 num:nil
+#+OPERATOR_SIGNOFF: PENDING
+
+* Synopsis
+:PROPERTIES:
+:CUSTOM_ID: summary
+:END:
+
+** Outcome
+
+- The workspace offers a *searchable live FAL image catalogue*, shows the *selected endpoint's indicative cost*, and exposes *account balance and recent usage*.
+
+** Before
+
+- The app offers *only Grok Imagine* and shows a *fixed two-cent label*; pricing and account clients are present but disconnected from the GUI.
+
+** After
+
+- A native picker lists active image endpoints with *names, capabilities, IDs and details*; only endpoints whose request and response shape can be handled are selectable.
+- Selecting an endpoint shows *live price or unavailable state* for the actual prompt-only or image-edit endpoint.
+- A selection estimated above the *configurable USD $0.20 default* requires confirmation *at selection*; Apply makes *no further cost confirmation*.
+- Settings shows *account balance, last-24-hour usage and recent billing events* using the existing separate account key.
+
+** Changes
+
+- Replace the one-entry model registry and fixed cost label with live catalogue, endpoint capability, pricing and selection state.
+- Restore the non-secret cost threshold and connect the existing pricing and account services to the GUI.
+
+** Unchanged
+
+- *One working image* remains the only edit reference; filter selection is free, Apply is the paid action, and the CLI remains local-upscale-only.
+
+** Edge cases
+:PROPERTIES:
+:CUSTOM_ID: synopsis-edge-cases
+:END:
+
+- Missing or stale catalogue, unknown pricing, unsupported model schemas and billing-key failures have *visible, independent states*; none makes local upscaling unavailable.
+
+** Decisions
+
+- Use the provider's *catalogue and schema* for discoverability and eligibility; use the *actual submitted endpoint* for pricing and provenance.
+- Treat an *unreliable or unavailable estimate* as requiring selection-time confirmation, as the product vision requires.
+
+** Next step
+
+- Definition review, then operator sign-off as described in [[#delivery-handoff][Delivery Handoff]].
+
+-----
+
+* Context
+:PROPERTIES:
+:CUSTOM_ID: context
+:END:
+
+** Problem
+
+The app can already generate from a prompt or apply a filter to its working image, but the GUI exposes only one FAL model and a static price. Users cannot inspect other FAL image endpoints, compare their likely cost, or see account usage in the app. A published endpoint ID alone does not establish that the existing two-family request builder can submit to it.
+
+** Outcome
+
+For both prompt-only and working-image contexts, a user can search the live FAL image catalogue, inspect and select a compatible endpoint, see an endpoint-specific price state before paid work, and inspect account spending independently of generation.
+
+** Scope
+
+*** In scope
+
+- Native model browsing and search, capability and compatibility presentation, endpoint-specific pricing, selection-time cost confirmation, and a configurable threshold.
+- Account balance, last-24-hour usage and recent billing events in Settings; current-session estimated spend beside the paid action.
+- Request and result handling for catalogue entries whose published schema fits the supported image contract, plus clear ineligibility for entries that do not.
+
+*** Out of scope
+
+- Multiple edit references, video/audio/3D models, non-FAL providers, user-authored payload forms for arbitrary schemas, and generation commands in the CLI.
+- A second confirmation on Apply, a spending limit or quota, and a promise that an estimate equals the eventual billed charge.
+
+*** Unchanged
+
+- The graph remains the authority for the base, candidate, lock chain and held-result reuse. The existing two Keychain credentials retain separate roles.
+
+** Authority and starting point
+
+- Project profile :: [[file:../../.sdlc/project.yaml][=.sdlc/project.yaml=]]
+- Product authority :: [[file:../../docs/VISION.md][=docs/VISION.md=]], especially Create And Transform and Stay Cost-Aware, with current workflow in [[file:../../docs/IMPLEMENTATION_GUIDE_v2.md][=docs/IMPLEMENTATION_GUIDE_v2.md=]] sections 2.2, 2.3 and 6.
+- Architecture authority :: [[file:../../docs/ARCHITECTURE.md][=docs/ARCHITECTURE.md=]], FAL Client Layer, Model Registry and Secrets And Settings.
+- Current implementation fact :: [[file:../../Sources/FalGenerationKit/GenerationModels.swift][=GenerationModels.swift=]], [[file:../../Sources/FalGenerationKit/FalRequestBuilder.swift][=FalRequestBuilder.swift=]], [[file:../../Sources/FalGenerationKit/FalPricingClient.swift][=FalPricingClient.swift=]], [[file:../../Sources/FalGenerationKit/FalAccountClient.swift][=FalAccountClient.swift=]], and [[file:../../SuperscaleApp/SuperscaleApp/FilterPanel.swift][=FilterPanel.swift=]].
+- Behavioural references :: Pix's live catalogue and details picker in [[file:../../../pix/models.go][=pix/models.go=]]; Storyboard Gen's indicative FAL price and unavailable state in [[file:../../../storyboard-gen/src/storyboard_gen/pricing.py][=storyboard-gen/pricing.py=]]. These are read-only examples, not runtime dependencies.
+- External contract :: [[https://fal.ai/docs/platform-apis/v1/models][FAL model search]], [[https://fal.ai/docs/platform-apis/v1/models/pricing][pricing]], [[https://fal.ai/docs/platform-apis/v1/models/pricing/estimate][estimate]], [[https://fal.ai/docs/platform-apis/v1/models/usage][usage]], [[https://fal.ai/docs/platform-apis/v1/models/billing-events][billing events]], [[https://fal.ai/docs/platform-apis/v1/account/billing][account billing]], and [[https://fal.ai/docs/api-reference/platform-apis/authentication][key permissions]].
+
+** Constraints and dependencies
+:PROPERTIES:
+:CUSTOM_ID: constraints-and-dependencies
+:END:
+
+- Model metadata, endpoint availability, schemas and prices are *provider-owned and changeable*. Revalidate those contracts during delivery; do not encode a complete static catalogue or static prices.
+- A generation key may access catalogue/pricing; usage and billing events require FAL =BILLING= permissions. A least-privilege billing-capable account key is sufficient; =FULL= is not required.
+- All automated tests use injected transport and fixtures; any live FAL check is a bounded, operator-credentialed one-off or user test, never a persistent regression or build step.
+
+** Decisions
+
+- The model browser follows Pix's category-specific live search but uses native search and a detail pane. It does *not* copy Pix's 100-result first-page limit or its catch-all request payload: follow pagination and reject unhandled schemas before paid submission.
+- The default remains Grok Imagine. The context determines whether the prompt-only or edit endpoint is offered; changing context does not silently replace a chosen endpoint.
+- The threshold is a *per-request indicative estimate in USD*. Its default is =$0.20=, and the comparison is strictly greater than the threshold. A missing or unreliable estimate follows the vision's confirmation rule at selection.
+
+** Unresolved blockers
+
+- None.
+
+* Acceptance Criteria
+:PROPERTIES:
+:CUSTOM_ID: acceptance-criteria
+:END:
+
+** AC154.1 - Live compatible model browser :ac:
+:PROPERTIES:
+:CUSTOM_ID: ac-154-1
+:END:
+
+- Criterion :: Given an available catalogue, the workspace lists *all fetched active image endpoints* for its current prompt-only or one-reference context, supports search by name and endpoint ID, and shows model details and compatibility before selection; an unsupported schema is visibly ineligible.
+- Proven by :: [[#rt-154-1][RT154.1]] and [[#ut-154-1][UT154.1]]
+
+** AC154.2 - Selected endpoint drives submission :ac:
+:PROPERTIES:
+:CUSTOM_ID: ac-154-2
+:END:
+
+- Criterion :: Given a compatible selected endpoint, Apply sends the prompt and, when present, the *one graph-owned base image* to that endpoint using its validated payload shape; result provenance and held-result matching retain that endpoint ID.
+- Proven by :: [[#rt-154-2][RT154.2]]
+
+** AC154.3 - Endpoint-specific cost state :ac:
+:PROPERTIES:
+:CUSTOM_ID: ac-154-3
+:END:
+
+- Criterion :: Given a selected endpoint, the picker and paid-action area show its *current FAL unit price and indicative per-call estimate*, with currency, unit, source and unavailable state; the price is fetched for the *actual endpoint submitted*.
+- Proven by :: [[#rt-154-3][RT154.3]] and [[#ut-154-1][UT154.1]]
+
+** AC154.4 - Selection-time confirmation :ac:
+:PROPERTIES:
+:CUSTOM_ID: ac-154-4
+:END:
+
+- Criterion :: Given an estimate *strictly above the saved threshold* or an unavailable or unreliable estimate, selecting that endpoint requires an informed confirmation before it becomes active; declining preserves the prior selection and sends no paid request.
+- Proven by :: [[#rt-154-4][RT154.4]] and [[#ut-154-1][UT154.1]]
+
+** AC154.5 - Apply has no cost dialogue :ac:
+:PROPERTIES:
+:CUSTOM_ID: ac-154-5
+:END:
+
+- Criterion :: Given an accepted compatible model selection, Apply makes *no additional cost-confirmation request*; existing prompt, credential, busy-state, graph and cancellation guards still apply.
+- Proven by :: [[#rt-154-5][RT154.5]]
+
+** AC154.6 - Account usage visibility :ac:
+:PROPERTIES:
+:CUSTOM_ID: ac-154-6
+:END:
+
+- Criterion :: Given a working account key with billing permissions, Settings shows *balance, last-24-hour usage total and recent billing events*, identifying estimated usage separately from billed events; generation-key-only operation remains available when account data is unavailable.
+- Proven by :: [[#rt-154-6][RT154.6]], [[#ut-154-2][UT154.2]] and [[#ot-154-1][OT154.1]]
+
+** AC154.7 - Honest failure and spend states :ac:
+:PROPERTIES:
+:CUSTOM_ID: ac-154-7
+:END:
+
+- Criterion :: Given catalogue, pricing or account errors, the relevant surface shows a *specific unavailable or retry state* without inventing a zero price, a zero balance or complete usage; current-session spend counts only new successful paid requests and is labelled *estimated*.
+- Proven by :: [[#rt-154-7][RT154.7]] and [[#ut-154-2][UT154.2]]
+
+* Test Definitions
+:PROPERTIES:
+:CUSTOM_ID: test-definitions
+:END:
+
+** RT154.1 - Catalogue search and eligibility :testdef:
+:PROPERTIES:
+:CUSTOM_ID: rt-154-1
+:END:
+
+- Covers :: [[#ac-154-1][AC154.1]]
+- Boundary :: FAL catalogue client through GUI-facing model-browser state with stub transport.
+- Setup :: Multiple pages of active text-to-image and image-to-image entries, a deprecated entry, duplicate ID and one schema with an unsupported required field.
+- Action :: Load each context, follow the next cursor, and search by name and ID.
+- Expected :: All active matching entries appear once with metadata; unsupported entries show a reason and cannot be selected; a deprecated or wrong-context entry is absent.
+- Retention :: Persistent package regression suite.
+
+** RT154.2 - Model-specific paid request :testdef:
+:PROPERTIES:
+:CUSTOM_ID: rt-154-2
+:END:
+
+- Covers :: [[#ac-154-2][AC154.2]]
+- Boundary :: Workspace Apply through injected generation and storage services and graph.
+- Setup :: A compatible non-default prompt endpoint and a compatible non-default edit endpoint with distinct schema shapes; one base image and a held result.
+- Action :: Generate from an empty canvas, then select the edit model and Apply to the base twice with the same prompt.
+- Expected :: The correct endpoint and shape are sent for each context; the edit uploads only the base; provenance uses the selected ID; the repeated held result makes no second paid call.
+- Retention :: Persistent package and GUI regression suites at their respective seams.
+
+** RT154.3 - Pricing follows the paid endpoint :testdef:
+:PROPERTIES:
+:CUSTOM_ID: rt-154-3
+:END:
+
+- Covers :: [[#ac-154-3][AC154.3]]
+- Boundary :: Pricing client through visible pricing state with stub FAL responses.
+- Setup :: Distinct prices for a text endpoint and its edit sibling, including a non-image billing unit and a missing historical estimate.
+- Action :: Select each endpoint and change between prompt-only and edit context.
+- Expected :: The displayed amount, currency, unit and source match the endpoint that Apply would submit; unknown per-call cost is labelled unavailable, never inferred from an inapplicable unit price.
+- Retention :: Persistent package regression suite.
+
+** RT154.4 - Threshold, uncertainty and rejection :testdef:
+:PROPERTIES:
+:CUSTOM_ID: rt-154-4
+:END:
+
+- Covers :: [[#ac-154-4][AC154.4]]
+- Boundary :: Model selection state with injected pricing and a confirmation decision.
+- Setup :: Threshold USD 0.20 and estimates of USD 0.20, USD 0.2001 and unavailable; prior model selected.
+- Action :: Select each model, decline the high-cost choice, then accept it; alter the saved threshold and repeat.
+- Expected :: Equality needs no confirmation; higher and unknown cost do; decline leaves prior model and no request; accept commits the chosen endpoint; threshold persists and is validated as finite and nonnegative.
+- Retention :: Persistent package regression suite.
+
+** RT154.5 - Apply without second confirmation :testdef:
+:PROPERTIES:
+:CUSTOM_ID: rt-154-5
+:END:
+
+- Covers :: [[#ac-154-5][AC154.5]]
+- Boundary :: GUI-facing Apply action with injected confirmation and generation seams.
+- Setup :: Previously accepted high-cost model, valid prompt and key; then empty prompt and busy state.
+- Action :: Apply, and try the existing guarded cases.
+- Expected :: Valid Apply invokes generation once and never calls confirmation; empty or busy Apply invokes neither generation nor confirmation.
+- Retention :: Persistent GUI or package regression suite, according to the available action seam.
+
+** RT154.6 - Account summary and independent failure :testdef:
+:PROPERTIES:
+:CUSTOM_ID: rt-154-6
+:END:
+
+- Covers :: [[#ac-154-6][AC154.6]]
+- Boundary :: Account client and Settings-facing coordinator with stub FAL responses.
+- Setup :: Credit balance, paginated 24-hour usage, twenty recent billing events and distinct generation/account credentials; then missing, 401 and 403 account responses.
+- Action :: Refresh account state and invoke generation with the generation key.
+- Expected :: Balance, complete usage total and billed event amounts are labelled separately; only the account key reaches account endpoints; missing or rejected account key affects account state but not generation.
+- Retention :: Persistent package regression suite.
+
+** RT154.7 - Partial and stale states :testdef:
+:PROPERTIES:
+:CUSTOM_ID: rt-154-7
+:END:
+
+- Covers :: [[#ac-154-7][AC154.7]]
+- Boundary :: Model, pricing, account and spend presentation state with stub services.
+- Setup :: Catalogue timeout, pricing failure, usage pagination failure, cancelled request, successful paid result and held-result reuse.
+- Action :: Refresh each state and Apply the same filter twice.
+- Expected :: Errors and incomplete usage are explicit with retry; no stale price appears against a different endpoint; only the first successful paid request increases estimated session spend.
+- Retention :: Persistent package regression suite.
+
+** UT154.1 - Discover and choose a model :testdef:
+:PROPERTIES:
+:CUSTOM_ID: ut-154-1
+:END:
+
+- Covers :: [[#ac-154-1][AC154.1]], [[#ac-154-3][AC154.3]] and [[#ac-154-4][AC154.4]]
+- Validation method :: Human inspection of the native app with stubbed catalogue and pricing fixtures; no paid call.
+- Procedure :: Search a long model list, inspect details and cost, choose a low-cost model, then attempt a high-cost and an unpriced model, including keyboard and VoiceOver navigation.
+- Expected :: A user can find a model without knowing its endpoint ID, distinguish unsupported entries, understand indicative cost and the selection-time confirmation, and decline without changing the model.
+- Record :: Write the dated result to =validation.org=.
+
+** UT154.2 - Account and paid-action clarity :testdef:
+:PROPERTIES:
+:CUSTOM_ID: ut-154-2
+:END:
+
+- Covers :: [[#ac-154-6][AC154.6]] and [[#ac-154-7][AC154.7]]
+- Validation method :: Human inspection of the native app with stubbed account states; no paid call.
+- Procedure :: Inspect balance, usage, billing and session spend, then missing-key and error states while the generation key remains configured.
+- Expected :: The user can tell estimated from billed amounts, identify the usage period and recover from account errors without interpreting generation as unavailable.
+- Record :: Write the dated result to =validation.org=.
+
+** OT154.1 - Bounded live FAL contract :testdef:
+:PROPERTIES:
+:CUSTOM_ID: ot-154-1
+:END:
+
+- Covers :: [[#ac-154-6][AC154.6]] and [[#ac-154-3][AC154.3]]
+- Boundary :: FAL model, pricing and account endpoints using operator-supplied keys.
+- Procedure :: In a prepared app, refresh the model catalogue, price one supported endpoint, then refresh account balance and usage once; inspect the request URLs, response-derived labels and permissions without submitting generation.
+- Expected :: The live catalogue and price states reflect FAL responses, and account data appears only with a suitable billing key; any provider contract difference is recorded before a release claim.
+- Bounds :: One invocation of each read-only API flow, no generation or upload, no persistent automated test, no credentials in recorded evidence.
+- Record :: Write the dated result to =validation.org=.
+
+* Edge Cases
+:PROPERTIES:
+:CUSTOM_ID: edge-cases
+:END:
+
+** Selection and context change
+
+- Condition :: The user imports or clears a base image after choosing a model whose endpoint is incompatible with the new context, or a saved default is no longer offered.
+- Required behaviour :: Keep the user's choice visible but mark it incompatible and disable Apply until the user chooses a compatible endpoint; suggest the Grok default without silently substituting it.
+- Covered by :: [[#ac-154-1][AC154.1]], [[#ac-154-5][AC154.5]] and [[#rt-154-1][RT154.1]]
+
+** Price changes after selection
+
+- Condition :: FAL changes its price or the user changes the threshold after a model was confirmed.
+- Required behaviour :: Show the latest fetched price and timestamp. A changed amount or threshold that would newly require confirmation makes the selection pending; confirmation occurs through model selection, never Apply.
+- Covered by :: [[#ac-154-4][AC154.4]], [[#ac-154-5][AC154.5]] and [[#rt-154-4][RT154.4]]
+
+** Partial account data
+
+- Condition :: A later usage page or billing endpoint fails after balance succeeds.
+- Required behaviour :: Keep successful subresults identified, mark incomplete totals or events unavailable, and offer retry; do not show a partial sum as the complete last-24-hour total.
+- Covered by :: [[#ac-154-7][AC154.7]] and [[#rt-154-7][RT154.7]]
+
+* Solution Design
+:PROPERTIES:
+:CUSTOM_ID: solution-design
+:END:
+
+** Architecture context
+
+- Relevant components :: =FalGenerationKit= owns FAL catalogue, schema eligibility, request and response handling, pricing and account HTTP; =SuperscaleUXCore= owns browser, selection, price, spend and account state; =SuperscaleApp= presents these in native controls.
+- Ownership boundary :: SwiftUI never constructs provider payloads or reads secrets from persistence. The graph alone decides which image Apply can send.
+- Existing pattern :: Extend the handler table and injected transport seams. Retain separate generation and account Keychain slots.
+
+** High-level design
+
+*** Catalogue and eligibility
+
+- Query =GET /v1/models= for active =text-to-image= or =image-to-image= endpoints according to whether the graph has a base. Follow =next_cursor= to the end, deduplicate by endpoint ID and retain provider order. Request =expand=openapi-3.0= for the entries presented, or fetch schema on demand for a highlighted entry if a whole-page expansion is too large.
+- A catalogue entry is selectable only when a deterministic adapter can build its required prompt and optional single-reference payload, omit unsupported optional controls, and parse an image result. Use explicit family adapters where necessary. Schema-derived admission may handle a plain =prompt= plus =image_url= or =image_urls= contract; any other required input, unsupported result shape, missing schema or unvalidated endpoint is displayed with a reason and is *not selectable*. No catch-all paid request is sent on a guessed payload.
+- Show searchable display name, endpoint ID, category, description, tags and model link where supplied. A detail pane shows capability and eligibility, plus loading or unavailable states. A stale saved default or lost catalogue connection does not become an implicit new model.
+
+*** Pricing and selection
+
+- Price the *endpoint ID sent to FAL*, including edit endpoints. Request its unit price and historical per-call estimate through =FalPricingClient=. Show both with their actual currency and billing unit; the historical estimate is indicative, and the unit price alone is not treated as per-call cost when billed by megapixel, second or other variable unit.
+- A candidate selection waits for pricing. Prefer FAL's historical one-call estimate; if it is unavailable, a flat per-image unit price for exactly one requested image can be used as a per-call estimate. Variable units, unsupported currencies and missing prices leave the estimate unknown. For a reliable USD estimate greater than the saved threshold, or no reliable estimate, present a confirmation naming the endpoint, estimate or uncertainty, and threshold. Accept commits the model; decline leaves the prior model. The default threshold is USD 0.20; store a finite nonnegative value in app preferences and expose it in Settings.
+- The current selection retains its accepted price context. Refresh and context changes invalidate any newly risky acceptance, including an unconfirmed launch default. Apply reads the committed selection and has no cost dialogue; if selection is pending or incompatible, Apply is unavailable with an explanation and a route back to the picker.
+- Replace the fixed cost label beside Apply with the live price/estimate or a clear unavailable state. Accumulate *estimated session spend* from successful new paid requests with known estimates only; count successful calls with unknown estimates separately. Never add a held result, rejected request, cancellation or failed request. Show currency and indicate this is not a billing ledger.
+
+*** Account view
+
+- Use the existing account key for =GET /v1/account/billing?expand=credits=, =GET /v1/models/usage= with explicit rolling 24-hour start/end and =expand=time_series=, and =GET /v1/models/billing-events?limit=20=. Follow usage pagination before publishing a complete total. Parse =cost_total= as the current field, retaining compatibility with =cost= only where FAL still supplies it. Show billed event =cost_total= rather than deriving it from units or the legacy nano-dollar estimate.
+- Settings displays account identity and balance, last-24-hour usage estimate with its time window, and recent billed events with endpoint and timestamp. Sum usage only within the same currency; show separate totals if FAL returns more than one. Each subresult has independent loading, available and unavailable states. A missing key explains =BILLING= permissions. A 403 describes insufficient billing permission, not an undefined Admin scope.
+- Account refresh is explicit and may also run after a successful paid request, without delaying the candidate image. The account key never substitutes for the generation key, and account failure never disables generation.
+
+*** Data, failure and compatibility
+
+- Persist the threshold and optional default model ID as non-secret preferences. Keep catalogue, price and account responses in memory only, with fetch time and endpoint identity; do not persist billing data. Validate stored defaults against the live catalogue before use.
+- Cancel older catalogue and price tasks when context or highlight changes, and discard late responses by endpoint/context token. Expose retry for catalogue, pricing and account failures. Do not show stale pricing as current for another endpoint.
+- Keep the existing Grok request path and Graph result handling. New adapters must preserve one-reference editing, prompt-only generation, current cancellation semantics, output download, redaction and existing local-upscale behaviour.
+
+** Design decisions and verification
+
+*** Live discovery with guarded execution
+
+- Decision :: The browser is broad; paid execution requires an eligible schema or explicit adapter.
+- Rationale :: FAL's live catalogue is larger and more variable than Pix's handler fallback or Superscale's two-entry table. Guessing an arbitrary payload could misrepresent compatibility or incur an unintended request.
+- Verification :: [[#rt-154-1][RT154.1]], [[#rt-154-2][RT154.2]] and [[#ut-154-1][UT154.1]].
+
+*** Confirmation belongs to selection
+
+- Decision :: Price and uncertainty are reviewed when selecting the model. Apply is a single paid-action control with no cost dialogue.
+- Verification :: [[#rt-154-4][RT154.4]] and [[#rt-154-5][RT154.5]].
+
+*** Actual billing and estimates stay distinct
+
+- Decision :: Per-call pricing, session estimate, usage estimate, credit balance and billed events are separate labelled values.
+- Verification :: [[#rt-154-3][RT154.3]], [[#rt-154-6][RT154.6]] and [[#ut-154-2][UT154.2]].
+
+** Routine details left to implementation
+
+- Native layout of the search field, result list and details pane within the current workspace; SwiftUI component boundaries and non-material cache duration.
+
+** Architecture impact
+
+*** Security impact
+
+- Threat boundary :: Existing generation-key and billing-key trust boundary remains; only FAL's HTTPS platform and generation endpoints are contacted.
+- Data and secrets :: Keys remain in Keychain and headers; redact both keys from diagnostics. Billing responses stay in memory and are excluded from session files and app bundles.
+- Access :: Ask for the least-privilege =BILLING= key for usage and events; no automatic credential reuse or privilege widening.
+- Conclusion :: Existing FAL transport and redaction patterns extend to catalogue and pricing; newly displayed account data needs explicit in-memory lifetime and no log exposure.
+
+*** Other relevant qualities
+
+- Accessibility :: Search results, eligibility, price state, threshold and confirmation must be reachable and named through native keyboard and VoiceOver controls.
+- Reliability :: Pagination, cancellation and independently recoverable failures prevent a partial catalogue or account total from being represented as complete.
+
+* Delivery Handoff
+:PROPERTIES:
+:CUSTOM_ID: delivery-handoff
+:END:
+
+- Required reading :: [[file:../../docs/IMPLEMENTATION_GUIDE_v2.md][=docs/IMPLEMENTATION_GUIDE_v2.md=]] sections 2.2, 2.3, 3.6 and 6; [[file:../../docs/ARCHITECTURE.md][=docs/ARCHITECTURE.md=]] FAL Client Layer, Model Registry and Secrets And Settings; the FAL contract links in Context. Pix and Storyboard Gen links are explanatory references, not delivery dependencies.
+- Entry conditions :: Explicit operator sign-off, published definition with current internal definition PASS in [[file:audits.yaml][=audits.yaml=]], current provider contract check, and normal delivery admission. A live billing check requires an operator-supplied billing-capable account key and records no key material.
+- First implementation step :: Write [[#rt-154-1][RT154.1]], [[#rt-154-3][RT154.3]] and [[#rt-154-4][RT154.4]] against the transport and state seams, observe meaningful RED, then review test code before implementing target behaviour.
+- Definition evidence :: [[file:audits.yaml][=audits.yaml=]]
+- Validation evidence :: [[file:validation.org][=validation.org=]]; record one tagged result heading per defined test during delivery.
+- Documentation impact :: Update =docs/ARCHITECTURE.md=, =docs/IMPLEMENTATION_GUIDE_v2.md=, =README.md= and relevant settings/help text to describe live model eligibility, actual pricing, account permissions and the threshold. Preserve historical MVP decisions while marking what W154 supersedes.
